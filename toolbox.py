@@ -5,6 +5,8 @@ import inspect
 import re
 from latex2mathml.converter import convert as tex2mathml
 from functools import wraps, lru_cache
+
+
 ############################### 插件输入输出接驳区 #######################################
 class ChatBotWithCookies(list):
     def __init__(self, cookie):
@@ -20,24 +22,27 @@ class ChatBotWithCookies(list):
     def get_cookies(self):
         return self._cookies
 
+
 def ArgsGeneralWrapper(f):
     """
     装饰器函数，用于重组输入参数，改变输入参数的顺序与结构。
     """
-    def decorated(cookies, max_length, llm_model, txt, txt2, top_p, temperature, chatbot, history, system_prompt, *args):
+
+    def decorated(cookies, max_length, llm_model, txt, txt2, top_p, temperature, chatbot, history, system_prompt,
+                  *args):
         txt_passon = txt
         if txt == "" and txt2 != "": txt_passon = txt2
         # 引入一个有cookie的chatbot
         cookies.update({
-            'top_p':top_p, 
-            'temperature':temperature,
+            'top_p': top_p,
+            'temperature': temperature,
         })
         llm_kwargs = {
             'api_key': cookies['api_key'],
             'llm_model': llm_model,
-            'top_p':top_p, 
+            'top_p': top_p,
             'max_length': max_length,
-            'temperature':temperature,
+            'temperature': temperature,
         }
         plugin_kwargs = {
             # 目前还没有
@@ -45,7 +50,9 @@ def ArgsGeneralWrapper(f):
         chatbot_with_cookie = ChatBotWithCookies(cookies)
         chatbot_with_cookie.write_list(chatbot)
         yield from f(txt_passon, llm_kwargs, plugin_kwargs, chatbot_with_cookie, history, system_prompt, *args)
+
     return decorated
+
 
 def update_ui(chatbot, history, msg='正常', **kwargs):  # 刷新界面
     """
@@ -54,10 +61,12 @@ def update_ui(chatbot, history, msg='正常', **kwargs):  # 刷新界面
     assert isinstance(chatbot, ChatBotWithCookies), "在传递chatbot的过程中不要将其丢弃。必要时，可用clear将其清空，然后用for+append循环重新赋值。"
     yield chatbot.get_cookies(), chatbot, history, msg
 
+
 def CatchException(f):
     """
     装饰器函数，捕捉函数f中的异常并封装到一个生成器中返回，并显示到聊天当中。
     """
+
     @wraps(f)
     def decorated(txt, top_p, temperature, chatbot, history, systemPromptTxt, WEB_PORT):
         try:
@@ -71,7 +80,8 @@ def CatchException(f):
                 chatbot = [["插件调度异常", "异常原因"]]
             chatbot[-1] = (chatbot[-1][0],
                            f"[Local Message] 实验性函数调用出错: \n\n{tb_str} \n\n当前代理可用性: \n\n{check_proxy(proxies)}")
-            yield from update_ui(chatbot=chatbot, history=history, msg=f'异常 {e}') # 刷新界面
+            yield from update_ui(chatbot=chatbot, history=history, msg=f'异常 {e}')  # 刷新界面
+
     return decorated
 
 
@@ -85,11 +95,13 @@ def HotReload(f):
     最后，使用yield from语句返回重新加载过的函数，并在被装饰的函数上执行。
     最终，装饰器函数返回内部函数。这个内部函数可以将函数的原始定义更新为最新版本，并执行函数的新版本。
     """
+
     @wraps(f)
     def decorated(*args, **kwargs):
         fn_name = f.__name__
         f_hot_reload = getattr(importlib.reload(inspect.getmodule(f)), fn_name)
         yield from f_hot_reload(*args, **kwargs)
+
     return decorated
 
 
@@ -106,12 +118,11 @@ def get_reduce_token_percent(text):
         EXCEED_ALLO = 500  # 稍微留一点余地，否则在回复时会因余量太少出问题
         max_limit = float(match[0]) - EXCEED_ALLO
         current_tokens = float(match[1])
-        ratio = max_limit/current_tokens
+        ratio = max_limit / current_tokens
         assert ratio > 0 and ratio < 1
-        return ratio, str(int(current_tokens-max_limit))
+        return ratio, str(int(current_tokens - max_limit))
     except:
         return 0.5, '不详'
-
 
 
 def write_results_to_file(history, file_name=None):
@@ -123,19 +134,22 @@ def write_results_to_file(history, file_name=None):
     if file_name is None:
         # file_name = time.strftime("chatGPT分析报告%Y-%m-%d-%H-%M-%S", time.localtime()) + '.md'
         file_name = 'chatGPT分析报告' + \
-            time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime()) + '.md'
+                    time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime()) + '.md'
     os.makedirs('./gpt_log/', exist_ok=True)
     with open(f'./gpt_log/{file_name}', 'w', encoding='utf8') as f:
         f.write('# chatGPT 分析报告\n')
         for i, content in enumerate(history):
-            try:    # 这个bug没找到触发条件，暂时先这样顶一下
+            try:  # 这个bug没找到触发条件，暂时先这样顶一下
                 if type(content) != str:
                     content = str(content)
             except:
                 continue
             if i % 2 == 0:
                 f.write('## ')
-            f.write(content)
+            try:
+                f.write(content)
+            except:
+                f.write(content.encode('utf-8', 'replace').decode('utf-8'))  # 防止写入时格式报错
             f.write('\n\n')
     res = '以上材料已经被写入' + os.path.abspath(f'./gpt_log/{file_name}')
     print(res)
@@ -150,8 +164,6 @@ def regular_txt_to_markdown(text):
     text = text.replace('\n\n\n', '\n\n')
     text = text.replace('\n\n\n', '\n\n')
     return text
-
-
 
 
 def report_execption(chatbot, history, a, b):
@@ -219,20 +231,21 @@ def markdown_convertion(txt):
             return content
         else:
             return tex2mathml_catch_exception(content)
-        
+
     def markdown_bug_hunt(content):
         """
         解决一个mdx_math的bug（单$包裹begin命令时多余<script>）
         """
-        content = content.replace('<script type="math/tex">\n<script type="math/tex; mode=display">', '<script type="math/tex; mode=display">')
+        content = content.replace('<script type="math/tex">\n<script type="math/tex; mode=display">',
+                                  '<script type="math/tex; mode=display">')
         content = content.replace('</script>\n</script>', '</script>')
         return content
-    
 
     if ('$' in txt) and ('```' not in txt):  # 有$标识的公式符号，且没有代码段```的标识
         # convert everything to html format
         split = markdown.markdown(text='---')
-        convert_stage_1 = markdown.markdown(text=txt, extensions=['mdx_math', 'fenced_code', 'tables', 'sane_lists'], extension_configs=markdown_extension_configs)
+        convert_stage_1 = markdown.markdown(text=txt, extensions=['mdx_math', 'fenced_code', 'tables', 'sane_lists'],
+                                            extension_configs=markdown_extension_configs)
         convert_stage_1 = markdown_bug_hunt(convert_stage_1)
         # re.DOTALL: Make the '.' special character match any character at all, including a newline; without this flag, '.' will match anything except a newline. Corresponds to the inline flag (?s).
         # 1. convert to easy-to-copy tex (do not render math)
@@ -266,7 +279,7 @@ def close_up_code_segment_during_stream(gpt_reply):
     n_mark = len(segments) - 1
     if n_mark % 2 == 1:
         # print('输出代码片段中！')
-        return gpt_reply+'\n```'
+        return gpt_reply + '\n```'
     else:
         return gpt_reply
 
@@ -400,7 +413,7 @@ def on_file_uploaded(files, chatbot, txt, txt2, checkboxes):
     chatbot.append(['我上传了文件，请查收',
                     f'[Local Message] 收到以下文件: \n\n{moved_files_str}' +
                     f'\n\n调用路径参数已自动修正到: \n\n{txt}' +
-                    f'\n\n现在您点击任意“红颜色”标识的函数插件时，以上文件将被作为输入参数'+err_msg])
+                    f'\n\n现在您点击任意“红颜色”标识的函数插件时，以上文件将被作为输入参数' + err_msg])
     return chatbot, txt, txt2
 
 
@@ -413,15 +426,18 @@ def on_report_generated(files, chatbot):
     chatbot.append(['汇总报告如何远程获取？', '汇总报告已经添加到右侧“文件上传区”（可能处于折叠状态），请查收。'])
     return report_files, chatbot
 
+
 def is_openai_api_key(key):
     API_MATCH = re.match(r"sk-[a-zA-Z0-9]{48}$", key)
     return bool(API_MATCH)
+
 
 def is_api2d_key(key):
     if key.startswith('fk') and len(key) == 41:
         return True
     else:
         return False
+
 
 def is_any_api_key(key):
     if ',' in key:
@@ -449,8 +465,9 @@ def select_api_key(keys, llm_model):
     if len(avail_key_list) == 0:
         raise RuntimeError(f"您提供的api-key不满足要求，不包含任何可用于{llm_model}的api-key。")
 
-    api_key = random.choice(avail_key_list) # 随机负载均衡
+    api_key = random.choice(avail_key_list)  # 随机负载均衡
     return api_key
+
 
 @lru_cache(maxsize=128)
 def read_single_conf_with_lru_cache(arg):
@@ -461,12 +478,13 @@ def read_single_conf_with_lru_cache(arg):
         r = getattr(importlib.import_module('config'), arg)
     # 在读取API_KEY时，检查一下是不是忘了改config
     if arg == 'API_KEY':
-        print亮蓝(f"[API_KEY] 本项目现已支持OpenAI和API2D的api-key。也支持同时填写多个api-key，如API_KEY=\"openai-key1,openai-key2,api2d-key3\"")
+        print亮蓝(
+            f"[API_KEY] 本项目现已支持OpenAI和API2D的api-key。也支持同时填写多个api-key，如API_KEY=\"openai-key1,openai-key2,api2d-key3\"")
         print亮蓝(f"[API_KEY] 您既可以在config.py中修改api-key(s)，也可以在问题输入区输入临时的api-key(s)，然后回车键提交后即可生效。")
         if is_any_api_key(r):
             print亮绿(f"[API_KEY] 您的 API_KEY 是: {r[:15]}*** API_KEY 导入成功")
         else:
-            print亮红( "[API_KEY] 正确的 API_KEY 是'sk'开头的51位密钥（OpenAI），或者 'fk'开头的41位密钥，请在config文件中修改API密钥之后再运行。")
+            print亮红("[API_KEY] 正确的 API_KEY 是'sk'开头的51位密钥（OpenAI），或者 'fk'开头的41位密钥，请在config文件中修改API密钥之后再运行。")
     if arg == 'proxies':
         if r is None:
             print亮红('[PROXY] 网络代理状态：未配置。无代理状态下很可能无法访问OpenAI家族的模型。建议：检查USE_PROXY选项是否修改。')
@@ -502,6 +520,7 @@ class DummyWith():
     在上下文执行开始的情况下，__enter__()方法会在代码块被执行前被调用，
     而在上下文执行结束时，__exit__()方法则会被调用。
     """
+
     def __enter__(self):
         return self
 
